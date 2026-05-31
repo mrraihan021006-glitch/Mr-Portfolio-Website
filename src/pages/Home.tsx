@@ -24,7 +24,6 @@ export default function Home() {
   };
 
   return (
-    {/* মেইন ব্যাকগ্রাউন্ডে dark:from-slate-950 dark:to-slate-900 অ্যাড করা হয়েছে */}
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 dark:from-slate-950 dark:to-slate-900 pb-20 transition-colors duration-500">
       
       {/* Hero Section */}
