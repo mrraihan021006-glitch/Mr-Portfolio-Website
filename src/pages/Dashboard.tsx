@@ -1,152 +1,206 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { useNavigate } from 'react-router-dom';
+import { LayoutDashboard, Settings, PlusSquare, FolderKanban, LogOut, Trash2, Edit3, Image as ImageIcon } from 'lucide-react';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [uploading, setUploading] = useState(false);
+  const [projectsList, setProjectsList] = useState<any[]>([]);
+  const [editingId, setEditingId] = useState<number | null>(null);
   
-  const [formData, setFormData] = useState({
-    title: '', description: '', category: 'Business', live_url: '', image_url: ''
-  });
+  const [formData, setFormData] = useState({ title: '', description: '', category: 'Business', live_url: '', image_url: '' });
+  const [siteData, setSiteData] = useState({ profile_image: '', stat_projects: '', stat_clients: '', stat_experience: '' });
 
   useEffect(() => {
-    // লগইন চেক করা
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        navigate('/admin/login'); 
-      } else {
-        setLoading(false);
-      }
-    };
     checkUser();
-  }, [navigate]);
+    fetchProjects();
+    fetchSiteData();
+  }, []);
+
+  const checkUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) navigate('/admin/login');
+    else setLoading(false);
+  };
+
+  const fetchProjects = async () => {
+    const { data } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
+    if (data) setProjectsList(data);
+  };
+
+  const fetchSiteData = async () => {
+    const { data } = await supabase.from('site_data').select('*').eq('id', 1).single();
+    if (data) setSiteData(data);
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/');
   };
 
-  // Cloudinary Image Upload Logic
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
+  const uploadToCloudinary = async (file: File) => {
     const data = new FormData();
     data.append("file", file);
-    data.append("upload_preset", "raihan_metadata"); // তোমার Upload Preset
-    data.append("cloud_name", "dbkmg0oia");          // তোমার Cloud Name
+    data.append("upload_preset", "raihan_metadata");
+    data.append("cloud_name", "dbkmg0oia");
+    const res = await fetch(`https://api.cloudinary.com/v1_1/dbkmg0oia/image/upload`, { method: "POST", body: data });
+    return await res.json();
+  };
 
+  const handleProjectImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.[0]) return;
+    setUploading(true);
     try {
-      const res = await fetch(`https://api.cloudinary.com/v1_1/dbkmg0oia/image/upload`, {
-        method: "POST",
-        body: data
-      });
-      const uploadedImage = await res.json();
+      const uploadedImage = await uploadToCloudinary(e.target.files[0]);
       setFormData({ ...formData, image_url: uploadedImage.secure_url });
-    } catch (err) {
-      console.error("Image upload failed", err);
-      alert("Image upload failed! Please try again.");
     } finally {
       setUploading(false);
     }
   };
 
-  // Supabase Database Insert Logic
-  const submitProject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.image_url) {
-      alert("Please upload an image first!");
-      return;
-    }
-
-    const { error } = await supabase.from('projects').insert([formData]);
-    
-    if (!error) {
-      alert("Project Added Successfully!");
-      setFormData({ title: '', description: '', category: 'Business', live_url: '', image_url: '' }); // Form Reset
-    } else {
-      alert("Error adding project: " + error.message);
+  const handleProfileImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.[0]) return;
+    setUploading(true);
+    try {
+      const uploadedImage = await uploadToCloudinary(e.target.files[0]);
+      setSiteData({ ...siteData, profile_image: uploadedImage.secure_url });
+    } finally {
+      setUploading(false);
     }
   };
 
-  if (loading) return <div className="text-center mt-20 text-xl font-bold">Loading Admin Area...</div>;
+  const submitProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingId) {
+      await supabase.from('projects').update(formData).eq('id', editingId);
+      alert("Project Updated!");
+    } else {
+      await supabase.from('projects').insert([formData]);
+      alert("Project Added!");
+    }
+    setFormData({ title: '', description: '', category: 'Business', live_url: '', image_url: '' });
+    setEditingId(null);
+    fetchProjects();
+    setActiveTab('manage_projects');
+  };
+
+  const deleteProject = async (id: number) => {
+    if (window.confirm("Are you sure you want to delete this project?")) {
+      await supabase.from('projects').delete().eq('id', id);
+      fetchProjects();
+    }
+  };
+
+  const editProject = (project: any) => {
+    setFormData(project);
+    setEditingId(project.id);
+    setActiveTab('project_form');
+  };
+
+  const saveSiteData = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await supabase.from('site_data').update(siteData).eq('id', 1);
+    alert("Home Page Data Updated!");
+  };
+
+  if (loading) return <div className="text-center mt-20 font-bold text-xl">Loading System...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
+    <div className="min-h-screen bg-slate-100 flex">
       {/* Sidebar */}
-      <div className="w-64 bg-gray-900 text-white p-6 relative">
-        <h2 className="text-2xl font-bold mb-8">Control Center</h2>
-        <ul className="space-y-4 font-medium">
-          <li 
-            onClick={() => setActiveTab('dashboard')} 
-            className={`cursor-pointer hover:text-blue-400 ${activeTab === 'dashboard' ? 'text-blue-400' : ''}`}
-          >
-            Dashboard
+      <div className="w-64 bg-slate-900 text-white p-6 relative flex flex-col">
+        <h2 className="text-2xl font-black mb-10 tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">Admin Panel</h2>
+        <ul className="space-y-2 font-medium flex-1">
+          <li onClick={() => setActiveTab('dashboard')} className={`cursor-pointer p-3 rounded-lg flex items-center gap-3 transition ${activeTab === 'dashboard' ? 'bg-blue-600' : 'hover:bg-slate-800'}`}>
+            <LayoutDashboard className="w-5 h-5" /> Dashboard
           </li>
-          <li 
-            onClick={() => setActiveTab('add_project')} 
-            className={`cursor-pointer hover:text-blue-400 ${activeTab === 'add_project' ? 'text-blue-400' : ''}`}
-          >
-            Add New Project
+          <li onClick={() => setActiveTab('site_settings')} className={`cursor-pointer p-3 rounded-lg flex items-center gap-3 transition ${activeTab === 'site_settings' ? 'bg-blue-600' : 'hover:bg-slate-800'}`}>
+            <Settings className="w-5 h-5" /> Home Page Setup
+          </li>
+          <li onClick={() => { setActiveTab('project_form'); setEditingId(null); setFormData({ title: '', description: '', category: 'Business', live_url: '', image_url: '' }); }} className={`cursor-pointer p-3 rounded-lg flex items-center gap-3 transition ${activeTab === 'project_form' ? 'bg-blue-600' : 'hover:bg-slate-800'}`}>
+            <PlusSquare className="w-5 h-5" /> Add Project
+          </li>
+          <li onClick={() => setActiveTab('manage_projects')} className={`cursor-pointer p-3 rounded-lg flex items-center gap-3 transition ${activeTab === 'manage_projects' ? 'bg-blue-600' : 'hover:bg-slate-800'}`}>
+            <FolderKanban className="w-5 h-5" /> Manage Portfolio
           </li>
         </ul>
-        <button 
-          onClick={handleLogout}
-          className="mt-auto absolute bottom-6 text-red-400 hover:text-red-300 font-bold"
-        >
-          Logout Session
+        <button onClick={handleLogout} className="flex items-center justify-center gap-2 mt-auto p-3 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg font-bold transition">
+          <LogOut className="w-5 h-5" /> Terminate Session
         </button>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 p-10">
+      <div className="flex-1 p-10 overflow-y-auto">
         
-        {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
-          <>
-            <h1 className="text-3xl font-bold mb-6">Welcome, Admin</h1>
+          <div>
+            <h1 className="text-3xl font-black mb-8 text-slate-900">System Overview</h1>
             <div className="grid grid-cols-3 gap-6">
-              <div className="bg-white p-6 rounded-xl shadow-sm border">
-                <h3 className="text-gray-500 font-medium">Messages Alert</h3>
-                <p className="text-lg font-bold mt-2 text-gray-800">Check Supabase DB</p>
-              </div>
-              <div className="bg-white p-6 rounded-xl shadow-sm border">
-                <h3 className="text-gray-500 font-medium">System Status</h3>
-                <p className="text-lg font-bold mt-2 text-green-600">All Systems Online</p>
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h3 className="text-slate-500 font-semibold mb-2">Total Projects</h3>
+                <p className="text-4xl font-black text-slate-900">{projectsList.length}</p>
               </div>
             </div>
-          </>
+          </div>
         )}
 
-        {/* Add Project Tab */}
-        {activeTab === 'add_project' && (
-          <>
-            <h1 className="text-3xl font-bold mb-6">Manage Portfolio</h1>
-            <form onSubmit={submitProject} className="bg-white p-8 rounded-xl border max-w-2xl shadow-sm">
-              <h3 className="text-2xl font-bold mb-6">Add New Project</h3>
-              
-              <div className="mb-4">
-                <label className="block text-sm font-semibold mb-2 text-gray-700">Project Title</label>
-                <input type="text" required className="w-full border p-3 rounded-lg focus:outline-blue-500"
-                  value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+        {activeTab === 'site_settings' && (
+          <div className="max-w-2xl">
+            <h1 className="text-3xl font-black mb-8 text-slate-900">Home Page Controls</h1>
+            <form onSubmit={saveSiteData} className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="mb-8">
+                <label className="block text-sm font-bold mb-2 text-slate-700">Profile Photo</label>
+                <div className="flex items-center gap-6">
+                  {siteData.profile_image ? (
+                    <img src={siteData.profile_image} alt="Profile" className="w-20 h-20 rounded-full object-cover border shadow" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center border"><ImageIcon className="w-8 h-8 text-slate-400" /></div>
+                  )}
+                  <div className="flex-1">
+                    <input type="file" accept="image/*" onChange={handleProfileImageUpload} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer" />
+                  </div>
+                </div>
               </div>
-                
-              <div className="mb-4">
-                <label className="block text-sm font-semibold mb-2 text-gray-700">Description</label>
-                <textarea required rows={3} className="w-full border p-3 rounded-lg focus:outline-blue-500"
-                  value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+              <div className="grid grid-cols-2 gap-6 mb-8">
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-slate-700">Projects Completed Stat</label>
+                  <input type="text" value={siteData.stat_projects} onChange={e => setSiteData({...siteData, stat_projects: e.target.value})} className="w-full border p-3 rounded-xl focus:outline-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-slate-700">Happy Clients Stat</label>
+                  <input type="text" value={siteData.stat_clients} onChange={e => setSiteData({...siteData, stat_clients: e.target.value})} className="w-full border p-3 rounded-xl focus:outline-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold mb-2 text-slate-700">Years Experience Stat</label>
+                  <input type="text" value={siteData.stat_experience} onChange={e => setSiteData({...siteData, stat_experience: e.target.value})} className="w-full border p-3 rounded-xl focus:outline-blue-500" />
+                </div>
               </div>
-                
-              <div className="flex gap-4 mb-4">
+              <button disabled={uploading} type="submit" className="w-full bg-slate-900 text-white px-6 py-4 rounded-xl font-bold hover:bg-slate-800 transition">
+                {uploading ? 'Uploading Image...' : 'Save Settings'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {activeTab === 'project_form' && (
+          <div className="max-w-2xl">
+            <h1 className="text-3xl font-black mb-8 text-slate-900">{editingId ? 'Edit Project' : 'Add New Project'}</h1>
+            <form onSubmit={submitProject} className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="mb-4">
+                <label className="block text-sm font-bold mb-2 text-slate-700">Project Title</label>
+                <input type="text" required className="w-full border p-3 rounded-xl focus:outline-blue-500" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-bold mb-2 text-slate-700">Description</label>
+                <textarea required rows={3} className="w-full border p-3 rounded-xl focus:outline-blue-500" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
+              </div>
+              <div className="flex gap-4 mb-6">
                 <div className="w-1/2">
-                  <label className="block text-sm font-semibold mb-2 text-gray-700">Category</label>
-                  <select className="w-full border p-3 rounded-lg focus:outline-blue-500" 
-                    value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
+                  <label className="block text-sm font-bold mb-2 text-slate-700">Category</label>
+                  <select className="w-full border p-3 rounded-xl focus:outline-blue-500" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
                     <option value="Business">Business</option>
                     <option value="Restaurant">Restaurant</option>
                     <option value="Ecommerce">Ecommerce</option>
@@ -154,35 +208,63 @@ export default function Dashboard() {
                   </select>
                 </div>
                 <div className="w-1/2">
-                  <label className="block text-sm font-semibold mb-2 text-gray-700">Live URL</label>
-                  <input type="url" required placeholder="https://" className="w-full border p-3 rounded-lg focus:outline-blue-500"
-                    value={formData.live_url} onChange={e => setFormData({...formData, live_url: e.target.value})} />
+                  <label className="block text-sm font-bold mb-2 text-slate-700">Live URL</label>
+                  <input type="url" required className="w-full border p-3 rounded-xl focus:outline-blue-500" value={formData.live_url} onChange={e => setFormData({...formData, live_url: e.target.value})} />
                 </div>
               </div>
-
-              <div className="mb-8">
-                <label className="block text-sm font-semibold mb-2 text-gray-700">Project Image (Cloudinary)</label>
-                <input type="file" accept="image/*" onChange={handleImageUpload} className="border p-2 w-full rounded-lg bg-gray-50 cursor-pointer" />
-                
-                {uploading && <p className="text-blue-600 text-sm mt-2 font-medium">Uploading image to Cloudinary...</p>}
-                
-                {formData.image_url && (
-                  <div className="mt-4">
-                    <p className="text-sm text-green-600 font-medium mb-2">Image uploaded successfully!</p>
-                    <img src={formData.image_url} alt="Preview" className="h-32 object-cover rounded-lg border shadow-sm" />
-                  </div>
-                )}
+              <div className="mb-8 border-t pt-6">
+                <label className="block text-sm font-bold mb-2 text-slate-700">Project Thumbnail</label>
+                <input type="file" accept="image/*" onChange={handleProjectImageUpload} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer mb-4" />
+                {formData.image_url && <img src={formData.image_url} alt="Preview" className="h-32 object-cover rounded-xl border shadow-sm" />}
               </div>
-
-              <button 
-                disabled={uploading} 
-                type="submit" 
-                className="w-full bg-black text-white px-6 py-3 rounded-lg font-bold text-lg hover:bg-gray-800 transition disabled:bg-gray-400"
-              >
-                Save Project to Database
+              <button disabled={uploading} type="submit" className="w-full bg-slate-900 text-white px-6 py-4 rounded-xl font-bold hover:bg-slate-800 transition">
+                {uploading ? 'Processing...' : (editingId ? 'Update Project' : 'Publish Project')}
               </button>
             </form>
-          </>
+          </div>
+        )}
+
+        {activeTab === 'manage_projects' && (
+          <div>
+            <h1 className="text-3xl font-black mb-8 text-slate-900">Manage Portfolio</h1>
+            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 text-slate-600 font-bold text-sm border-b">
+                  <tr>
+                    <th className="p-4">Project Details</th>
+                    <th className="p-4">Category</th>
+                    <th className="p-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {projectsList.map(project => (
+                    <tr key={project.id} className="hover:bg-slate-50 transition">
+                      <td className="p-4 flex items-center gap-4">
+                        {project.image_url ? (
+                          <img src={project.image_url} className="w-16 h-12 rounded object-cover border" alt="" />
+                        ) : (
+                          <div className="w-16 h-12 rounded bg-slate-100 flex items-center justify-center border"><ImageIcon className="w-4 h-4 text-slate-400" /></div>
+                        )}
+                        <span className="font-bold text-slate-900">{project.title}</span>
+                      </td>
+                      <td className="p-4 text-slate-600 font-medium">{project.category}</td>
+                      <td className="p-4 text-right">
+                        <button onClick={() => editProject(project)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition mr-2">
+                          <Edit3 className="w-5 h-5" />
+                        </button>
+                        <button onClick={() => deleteProject(project.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition">
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {projectsList.length === 0 && (
+                    <tr><td colSpan={3} className="p-8 text-center text-slate-500">No projects found. Add some from the Add Project tab.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
 
       </div>
