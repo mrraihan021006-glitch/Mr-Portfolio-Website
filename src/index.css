@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  background-color: #f8fafc;
-  color: #0f172a;
+@layer base {
+  body {
+    /* লাইট ও ডার্ক মোডের ব্যাকগ্রাউন্ড এবং স্মুথ ট্রানজিশন */
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50 transition-colors duration-500 ease-in-out;
+  }
 }
